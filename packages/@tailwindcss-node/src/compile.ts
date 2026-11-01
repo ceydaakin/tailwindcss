@@ -92,18 +92,21 @@ async function ensureSourceDetectionRootExists(compiler: {
 }
 
 export async function compileAst(ast: AstNode[], options: CompileOptions) {
+  purgeResolverCaches()
   let compiler = await _compileAst(ast, createCompileOptions(options))
   await ensureSourceDetectionRootExists(compiler)
   return compiler
 }
 
 export async function compile(css: string, options: CompileOptions) {
+  purgeResolverCaches()
   let compiler = await _compile(css, createCompileOptions(options))
   await ensureSourceDetectionRootExists(compiler)
   return compiler
 }
 
 export async function __unstable__loadDesignSystem(css: string, { base }: { base: string }) {
+  purgeResolverCaches()
   return ___unstable__loadDesignSystem(css, {
     base,
     async loadModule(id, base) {
@@ -199,8 +202,21 @@ const modules = [
   ...(process.env.NODE_PATH ? [...process.env.NODE_PATH.split(path.delimiter)] : []),
 ]
 
+// The resolvers cache file system lookups, including failed ones. Every
+// top-level compile purges them so that files created, changed or deleted since
+// the last compile (e.g. in a long-lived dev server) are seen right away.
+const cssFileSystem = new EnhancedResolve.CachedInputFileSystem(fs, 4000)
+const esmFileSystem = new EnhancedResolve.CachedInputFileSystem(fs, 4000)
+const cjsFileSystem = new EnhancedResolve.CachedInputFileSystem(fs, 4000)
+
+function purgeResolverCaches() {
+  cssFileSystem.purge()
+  esmFileSystem.purge()
+  cjsFileSystem.purge()
+}
+
 const cssResolver = EnhancedResolve.ResolverFactory.createResolver({
-  fileSystem: new EnhancedResolve.CachedInputFileSystem(fs, 4000),
+  fileSystem: cssFileSystem,
   useSyncFileSystemCalls: true,
   extensions: ['.css'],
   mainFields: ['style'],
@@ -230,7 +246,7 @@ async function resolveCssId(
 }
 
 const esmResolver = EnhancedResolve.ResolverFactory.createResolver({
-  fileSystem: new EnhancedResolve.CachedInputFileSystem(fs, 4000),
+  fileSystem: esmFileSystem,
   useSyncFileSystemCalls: true,
   extensions: ['.js', '.json', '.node', '.ts'],
   conditionNames: ['node', 'import'],
@@ -238,7 +254,7 @@ const esmResolver = EnhancedResolve.ResolverFactory.createResolver({
 })
 
 const cjsResolver = EnhancedResolve.ResolverFactory.createResolver({
-  fileSystem: new EnhancedResolve.CachedInputFileSystem(fs, 4000),
+  fileSystem: cjsFileSystem,
   useSyncFileSystemCalls: true,
   extensions: ['.js', '.json', '.node', '.ts'],
   conditionNames: ['node', 'require'],
